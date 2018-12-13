@@ -1,0 +1,200 @@
+.equ VMEM_SZ = 5 ; # rows on display
+.equ AD_CHAN_X = 0 ; ADC0 = PA0 , PORTA bit 0 X - led
+.equ AD_CHAN_Y = 1 ; ADC1 = PA1 , PORTA bit 1 Y - led
+.equ GAME_SPEED = 70 ; inter - run delay ( millisecs )
+.equ PRESCALE = 7 ; AD - prescaler value
+.equ BEEP_PITCH = 20 ; Victory beep pitch
+.equ BEEP_LENGTH = 100 ; Victory beep length
+; ---------------------------------------
+; --- Memory layout in SRAM
+.dseg
+.org SRAM_START
+POSX : .byte 1 ; Own position
+POSY : .byte 1
+TPOSX : .byte 1 ; Target position
+TPOSY : .byte 1
+LINE : .byte 1 ; Current line
+VMEM : .byte VMEM_SZ ; Video MEMory
+SEED : .byte 1 ; Seed for Random
+; ---------------------------------------
+; --- Macros for inc / dec - rementing
+; --- a byte in SRAM
+ 
+.macro INCSRAM ; inc byte in SRAM
+lds r16 , @0
+inc r16
+sts @0 , r16
+.endmacro
+
+//////////////////////V våra macros
+.macro JOYSTICK_Y
+ ldi @0,(1|1<<adlar)
+ out admux,@0
+ 
+ sbi adcsra,adsc
+ sbic adcsra,adsc
+ rjmp pc-1
+ in @0, ADCH;
+ .endmacro
+
+ 
+ .macro JOYSTICK_X
+ ldi @0,(1<<adlar)
+ out admux,@0
+
+ ;cli clear interrupts lool
+ sbi adcsra,adsc
+ sbic adcsra,adsc
+ rjmp pc-1
+ in @0, ADCH;
+ .endmacro
+ ///////////////////////^^ våra macros
+
+.macro DECSRAM ; dec byte in SRAM
+lds r16 , @0
+dec r16
+sts @0 , r16
+.endmacro
+ 
+;----------------------------------------
+;-----------------Code-------------------
+;----------------------------------------
+
+.cseg
+.org $0
+jmp START
+.org INT0addr
+jmp MUX
+ 
+START :
+
+/*** ; sätt stackpekaren*****/
+ldi r16,HIGH(ramend)
+out SPH , r16
+ldi r16,LOW(ramend)
+out SPL , r16
+/*** ; satt stackpekaren****/
+
+call HW_INIT
+
+loop:
+	call joystick
+	;call update
+	;call delay
+	
+RJMP LOOP
+	
+	
+	
+JOYSTICK:
+	
+	joystick_x r19
+	;out PORTB,r19
+	
+ret
+
+
+
+
+HW_INIT :
+
+/************************/
+	ldi ZH,HIGH(posX)
+	ldi ZL,LOW(posX)
+
+	ldi r16,$4;POSX
+	st z,r16 
+
+	ldi r16,$60;POSY
+	std z+1,r16
+
+	ldi r16,$40 ;TPOSX
+	std z+2,r16
+	;ldi r16,
+	
+	ldi r16,$20 ;TPOSY
+	std z+3,r16
+
+/********HÅRD JJ'''BAL KPD****************/
+	LDI r16,$F0;SKRIV UT GREJER
+	out ddra,r16;
+	clr r16
+	out ddrd,r16;
+
+
+	
+	ser r16			;UTSIGNAL PORTB
+	out ddrb, r16	;
+
+
+	ldi r16,$03;;  
+	out MCUCR,r16;; INT 0 PÅ POSITIV FLANK
+ 
+	ldi r16,(1<<INT0); ENBLABLE INTERRUPT @ INT0
+	out GICR,r16       ;
+
+	ldi r16,(1<<adlar);	adc0 ingång vald
+	out admux,r16;			adlar=1, left adjust result.
+
+	ldi r16,(1<<aden);	ad enable
+	out adcsra,r16;	slår på strömmen till ad-hardwarewere
+		
+/*** Konfigurera hardvara och MUX - avbrott enligt ***
+*** ditt elektriska schema . Konfigurera ***
+*** flanktriggat avbrott pa INT0 ( PD2 ). ***/
+ 
+sei ; display on
+ 
+ret
+
+
+
+
+MUX :
+ 
+push r16
+in r16,sreg
+push r16
+
+push ZL
+push ZH
+
+clr r16
+out portB,r16
+ldi ZL,LOW(posx)
+ldi ZH,HIGH(posx)
+ldd r16,Z+4
+inc r16
+std z+4,r16
+
+
+
+sbrs r16,$0
+rJMP PRINT_ME
+
+PRINT_TARGET:
+ldd r16 ,z+3 ;TPOSY -> r16
+out porta,r16
+ldd r16,z+2; TPOSX -> r16
+out portb,r16
+rjmp end_mux
+PRINT_ME:
+ldd r16 ,z+1; POSY -> r16
+out porta,r16
+ld r16,z; POSX -> r16
+out portb,r16
+/*ld r16,z+2
+inc r16 ;kan kanske funka för seed
+st z+2,r16*/
+
+/*** skriv rutin som handhar multiplexningen och ***
+*** utskriften till diodmatrisen . Oka SEED . ***/
+ 
+END_MUX:
+ pop ZH
+ pop ZL
+ pop r16
+ out sreg, r16
+ pop r16
+ 
+reti
