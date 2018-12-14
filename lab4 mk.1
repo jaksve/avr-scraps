@@ -65,7 +65,10 @@ sts @0 , r16
 jmp START
 .org INT0addr
 jmp MUX
- 
+ POSY_TAB:
+ .db $00,$20,$40,$60,$80,$80
+ POSX_TAB:
+.db $40,$20,$10,$08,$04,$02,$01,$01
 START :
 
 /*** ; sätt stackpekaren*****/
@@ -78,9 +81,9 @@ out SPL , r16
 call HW_INIT
 
 loop:
-	call joystick
-	;call update
-	;call delay
+	call joystick /*<------ nästan färdig funktion*/
+	;call update 
+	call delay /* temporär delay för testning.*/
 	
 RJMP LOOP
 	
@@ -89,7 +92,52 @@ RJMP LOOP
 JOYSTICK:
 	
 	joystick_x r19
-	;out PORTB,r19
+	joystick_y r20
+
+//<-----TEMPORÄR (KSK PERM???) LÖSNING INCOMING
+//stegrar grabben som FAN
+	andi r19, $F0
+	cpi r19,$F0
+	brne INTE_Fram
+	decsram POSx
+	INte_Fram:
+	cpi r19,$00
+	brne inte_bak
+	incsram POSx
+	inte_bak:
+
+	andi r20, $F0
+	cpi r20,$F0
+	brne INTE_upp
+	incsram POSy
+	INte_upp:
+	cpi r20,$00
+	brne inte_mer
+	decsram POSy
+	inte_mer:
+
+	/**** 
+	om r19>=$F0 ---> DECSRAM POSx
+	om r19<=$0F ---> DECSRAM POSx
+
+	same med r20 fast POSy.
+	****/
+
+	/*
+	INCSRAM POSX
+	decsram posy
+	*/
+
+	call limits /*** limits är färdig kod, tried and tested, ser till att vi inte trillar av världen*/
+
+		
+			
+	
+	
+	
+	
+	
+	
 	
 ret
 
@@ -98,21 +146,21 @@ ret
 
 HW_INIT :
 
-/************************/
+/*************klar (sort of) ***********/
 	ldi ZH,HIGH(posX)
 	ldi ZL,LOW(posX)
 
-	ldi r16,$4;POSX
+	ldi r16,$0;POSX
 	st z,r16 
 
-	ldi r16,$60;POSY
+	ldi r16,$4;POSY
 	std z+1,r16
 
-	ldi r16,$40 ;TPOSX
+	ldi r16,$6;TPOSX
 	std z+2,r16
 	;ldi r16,
 	
-	ldi r16,$20 ;TPOSY
+	ldi r16,$0 ;TPOSY
 	std z+3,r16
 
 /********HÅRD JJ'''BAL KPD****************/
@@ -150,8 +198,10 @@ ret
 
 
 
-MUX :
- 
+MUX : 
+/****************''MUXEN ÄR FÄRDIG OCH FUNGERAR! (förutom seed) *********/
+
+push r17
 push r16
 in r16,sreg
 push r16
@@ -174,15 +224,35 @@ rJMP PRINT_ME
 
 PRINT_TARGET:
 ldd r16 ,z+3 ;TPOSY -> r16
+ldd r17,z+2 ;TPOSX -> r17
+ldi ZH,HIGH(posy_tab*2)
+ldi ZL,LOW(posy_tab*2)
+add ZL,r16
+lpm r16,z
 out porta,r16
-ldd r16,z+2; TPOSX -> r16
-out portb,r16
+
+ldi ZH,HIGH(posx_tab*2)
+ldi ZL,LOW(posx_tab*2)
+add ZL,r17
+lpm r17,z
+out portb,r17
 rjmp end_mux
+
 PRINT_ME:
 ldd r16 ,z+1; POSY -> r16
+ld r17,z; POSX -> r17
+ldi ZH,HIGH(posy_tab*2)
+ldi ZL,LOW(posy_tab*2)
+add ZL,r16
+lpm r16,z
 out porta,r16
-ld r16,z; POSX -> r16
-out portb,r16
+
+ldi ZH,HIGH(posx_tab*2)
+ldi ZL,LOW(posx_tab*2)
+add zl,r17
+lpm r17,z
+out portb,r17
+
 /*ld r16,z+2
 inc r16 ;kan kanske funka för seed
 st z+2,r16*/
@@ -196,5 +266,38 @@ END_MUX:
  pop r16
  out sreg, r16
  pop r16
- 
+ pop r17
 reti
+
+delay:
+ldi r21,$FF
+D_2:
+ldi r22,$FF
+D_1:
+dec r22
+brne D_1
+dec r21
+brne D_2
+ret
+
+
+LIMITS :
+lds r16 , POSX ; variable
+ldi r17 ,7 ; upper limit +1
+call POS_LIM ; actual work
+sts POSX , r16
+lds r16 , POSY ; variable
+ldi r17 ,5 ; upper limit +1
+call POS_LIM ; actual work
+sts POSY , r16
+ret
+POS_LIM :
+ori r16 ,0 ; negative ?
+brmi POS_LESS ; POSX neg = > add 1
+cp r16 , r17 ; past edge
+brne POS_OK
+subi r16 ,2
+POS_LESS :
+inc r16
+POS_OK :
+ret
