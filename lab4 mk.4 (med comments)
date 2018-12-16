@@ -65,8 +65,9 @@ sts @0 , r16
 jmp START
 .org INT0addr
 jmp MUX
+
  POSY_TAB:
- .db $00,$20,$40,$60,$80,$80
+ .db $00,$20,$40,$60,$80,$80 ;BEHÖVS KSK INTE. VI KAN BITSHIFTA VÅRAT Y-VÄRDE SOM VI GÖR MED X-VÄRDET I UPDATE.
 
 START :
 
