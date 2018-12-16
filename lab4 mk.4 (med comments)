@@ -253,7 +253,7 @@ rcall delay ;<----WAT
 	ldi r16,(1<<adlar);	adc0 ingång vald
 	out admux,r16;			adlar=1, left adjust result.
 
-	ldi r16,(1<<aden);	ad enable
+	ldi r16,(1<<aden);	aden=enable ((PRESCALE<<adps))? adps (adprescaler) sätts i varje fall i acsra (adc statusregister) (s.213 i PDF).
 	out adcsra,r16;	slår på strömmen till ad-hardwarewere
 		
 /*** Konfigurera hardvara och MUX - avbrott enligt ***
@@ -398,6 +398,7 @@ POS_LESS :
 inc r16
 POS_OK :
 ret
+
 
 
 
