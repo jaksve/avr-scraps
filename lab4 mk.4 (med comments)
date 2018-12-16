@@ -316,7 +316,7 @@ sts line,r16
 
 
 seedlab:
-
+/*********LADDA RAKT UR RAM ISTÄLLET FÖR ATT SLÖSA MINNE MED PEKARE******/
 	ldi ZH, HIgh (seed)
 	ldi ZL, LOW(seed)
 	ld r16,Z+ ;; seed cord X -->r16
