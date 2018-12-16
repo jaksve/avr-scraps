@@ -401,7 +401,6 @@ ret
 
 
 
-
 /********************INEFFEKTIV BEEP FRÅN MORSELABBEN , BRA ATT FIXA MED SAMMA KRAV SOM MORSE*****************/
 beep:
 	ldi r28,$6
