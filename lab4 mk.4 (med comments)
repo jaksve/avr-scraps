@@ -1,0 +1,435 @@
+.equ VMEM_SZ = 5 ; # rows on display
+.equ AD_CHAN_X = 0 ; ADC0 = PA0 , PORTA bit 0 X - led
+.equ AD_CHAN_Y = 1 ; ADC1 = PA1 , PORTA bit 1 Y - led
+.equ GAME_SPEED = 70 ; inter - run delay ( millisecs )
+.equ PRESCALE = 7 ; AD - prescaler value
+.equ BEEP_PITCH = $20 ; Victory beep pitch
+.equ BEEP_LENGTH = $Ff ; Victory beep length
+; ---------------------------------------
+; --- Memory layout in SRAM
+.dseg
+.org SRAM_START
+POSX : .byte 1 ; Own position
+POSY : .byte 1
+TPOSX : .byte 1 ; Target position
+TPOSY : .byte 1
+LINE : .byte 1 ; Current line
+VMEM : .byte VMEM_SZ ; Video MEMory
+SEED : .byte 2 ; Seed for Random
+; ---------------------------------------
+; --- Macros for inc / dec - rementing
+; --- a byte in SRAM
+ 
+.macro INCSRAM ; inc byte in SRAM
+lds r16 , @0
+inc r16
+sts @0 , r16
+.endmacro
+
+//////////////////////V våra macros
+.macro JOYSTICK_Y
+ ldi @0,(1|1<<adlar)
+ out admux,@0
+ 
+ sbi adcsra,adsc
+ sbic adcsra,adsc
+ rjmp pc-1
+ in @0, ADCH;
+ .endmacro
+
+ 
+ .macro JOYSTICK_X
+ ldi @0,(1<<adlar)
+ out admux,@0
+
+ ;cli clear interrupts lool
+ sbi adcsra,adsc
+ sbic adcsra,adsc
+ rjmp pc-1
+ in @0, ADCH;
+ .endmacro
+ ///////////////////////^^ våra macros
+
+.macro DECSRAM ; dec byte in SRAM
+lds r16 , @0
+dec r16
+sts @0 , r16
+.endmacro
+ 
+;----------------------------------------
+;-----------------Code-------------------
+;----------------------------------------
+
+.cseg
+.org $0
+jmp START
+.org INT0addr
+jmp MUX
+ POSY_TAB:
+ .db $00,$20,$40,$60,$80,$80
+
+START :
+
+/*** ; sätt stackpekaren*****/
+ldi r16,HIGH(ramend)
+out SPH , r16
+ldi r16,LOW(ramend)
+out SPL , r16
+/*** ; satt stackpekaren****/
+
+call HW_INIT
+
+loop:
+
+
+//////////
+
+	call joystick /*<------ nästan färdig funktion*/
+	call erase
+	call update 
+	call delay /* temporär delay för testning.*/
+	//***kolla om träff. //
+	ldi zh,HIGH(posx)
+	ldi zl,low(posx)
+	ld r16,z+	; posx -->r16
+	ld r17,z+	; posy -->r17
+	ld r18,z+	;tposx -->r18
+	ld r19,z	;tposy -->r19
+
+	cpse r16,r18
+	rjmp no_hit
+	cpse r17,r19
+	rjmp NO_HIT
+	
+
+
+	HIT:
+	cli
+	ldi r16, beep_pitch
+	call beep
+
+	jmp start
+
+
+
+
+
+	no_hit:
+	rjmp loop
+
+
+
+	
+UPDATE :
+	clr ZH
+	ldi ZL , LOW ( POSX )
+	call SETPOS
+	clr ZH
+	ldi ZL , LOW ( TPOSX )
+	call SETPOS
+	ret
+	; --- SETPOS Set bit pattern of r16 into * Z
+	; --- Uses : r16 , r17 , Z
+	; --- 1 st call Z points to POSX at entry and POSY at exit
+	; --- 2 nd call Z points to TPOSX at entry and TPOSY at exit
+SETPOS :
+	ld r17 , Z + ; r17 = POSX
+	call SETBIT ; r16 = bitpattern for VMEM + POSY
+	ld r17 , Z ; r17 = POSY Z to POSY
+	ldi ZL , LOW ( VMEM )
+	add ZL , r17 ; Z= VMEM + POSY , ZL = VMEM +0..4
+	ld r17 , Z ; current line in VMEM
+	or r17 , r16 ; OR on place
+	st Z , r17 ; put back into VMEM
+	ret
+	; --- SETBIT Set bit r17 on r16
+	; --- Uses : r16 , r17
+SETBIT :
+	ldi r16 , $01 ; bit to shift
+SETBIT_LOOP :
+	dec r17
+	brmi SETBIT_END ; til done
+	lsl r16 ; shift
+	jmp SETBIT_LOOP
+SETBIT_END :
+	ret
+	
+	
+JOYSTICK:
+	
+	joystick_x r19
+	joystick_y r20
+	
+//<-----TEMPORÄR (KSK PERM???) LÖSNING INCOMING
+//stegrar grabben som FAN
+
+	andi r19, $F0
+	
+/**** 
+	om r19>=$F0 ---> DECSRAM POSx
+	om r19<=$0F ---> DECSRAM POSx
+
+	same med r20 fast POSy.
+	****/
+
+	cpi r19,$F0
+	brne INTE_Fram
+	incsram POSx
+	INte_Fram:
+	cpi r19,$00
+	brne inte_bak
+	decsram POSx
+	inte_bak:
+
+	andi r20, $F0
+	cpi r20,$F0
+	brne INTE_upp
+	incsram POSy
+	INte_upp:
+	cpi r20,$00
+	brne inte_mer
+	decsram POSy
+	inte_mer:
+
+
+
+
+	call limits		/*** limits är färdig kod, tried and tested, ser till att vi inte trillar av världen*/
+
+	ret
+
+
+
+
+HW_INIT :
+/********HÅRD JJ'''BAL KPD****************/
+/*************klar (sort of) ***********/
+	;ldi ZH,HIGH(posX)
+	;ldi ZL,LOW(posX)
+
+	ldi r16,0;POSX
+	sts posx,r16 
+	
+
+
+	ldi r16,2;POSy
+	sts posy,r16 
+	;ldi r16,$4;POSY
+	;sts posy,r16
+
+	lds r16,seed
+	sts tposx,r16
+	
+	lds r16,seed+1
+	sts tposy,r16
+	
+	/* ladda current line med 0.*/
+	clr r16
+	sts line,r16
+	
+	/*** clearar vmem***/
+
+rcall delay ;<----WAT
+
+/*************klar härifrån (sort of) ***********/
+	LDI r16,$F0;SKRIV UT GREJER
+	out ddra,r16;
+	clr r16
+	out ddrd,r16;
+
+
+	
+	ser r16			;UTSIGNAL PORTB
+	out ddrb, r16	;
+
+
+	ldi r16,$03;;  
+	out MCUCR,r16;; INT 0 PÅ POSITIV FLANK
+ 
+	ldi r16,(1<<INT0); ENBLABLE INTERRUPT @ INT0
+	out GICR,r16       ;
+
+	ldi r16,(1<<adlar);	adc0 ingång vald
+	out admux,r16;			adlar=1, left adjust result.
+
+	ldi r16,(1<<aden);	ad enable
+	out adcsra,r16;	slår på strömmen till ad-hardwarewere
+		
+/*** Konfigurera hardvara och MUX - avbrott enligt ***
+*** ditt elektriska schema . Konfigurera ***
+*** flanktriggat avbrott pa INT0 ( PD2 ). ***/
+ 
+sei ; display on
+ret
+	
+	
+	
+	
+	
+
+
+erase:
+	clr r16
+	sts vmem,r16
+	sts	vmem+1,r16
+	sts	vmem+2,r16
+	sts	vmem+3,r16
+	sts	vmem+4,r16
+	sts vmem+5,r16
+	ret
+
+
+MUX : 
+/****************''MUXEN ÄR FÄRDIG OCH FUNGERAR! (förutom seed) *********/
+
+push r17
+push r16
+in r16,sreg
+push r16
+
+push ZL
+push ZH
+
+ldi r16,$F0
+out porta,r16
+
+lds r16,Line
+ldi ZH,HIGH(VMEM)
+ldi ZL,LOW(VMEM)
+add Zl,r16
+ld r16,Z
+out PORTB,r16
+lds r17,line
+mov r16,r17
+ldi ZH,HIGH(POSY_TAB*2)
+ldi ZL,LOW(POSY_TAB*2)
+
+add ZL,r17
+lpm r17,Z
+
+out porta,r17
+
+sbrc r16,2
+ser r16
+inc r16
+sts line,r16
+
+
+seedlab:
+
+	ldi ZH, HIgh (seed)
+	ldi ZL, LOW(seed)
+	ld r16,Z+ ;; seed cord X -->r16
+	ld r17,Z+ ;seed cord Y -->r17
+
+	
+
+	
+	cpi r17,4
+	brlo pc+2
+	ser r17	;ladda y med max (ställer om till noll då inc r17)
+
+	cpi r16,6 
+	brlo pc+2
+	ldi r16,1
+
+
+	seed_end:
+	inc r16
+	inc r17
+	st -z,r17
+	st -z,r16
+
+
+ 
+END_MUX:
+ pop ZH
+ pop ZL
+ pop r16
+ out sreg, r16
+ pop r16
+ pop r17
+ reti
+
+
+;DELAY:
+;ldi     r16,Game_speed   ; Decimal bas
+;delayYttreLoop:
+;ldi     r17,$FF
+;delayInreLoop:
+;dec     r17
+;brne    delayInreLoop
+;dec     r16                    1 millisekund
+;brne    delayYttreLoop
+;ret
+
+delay: ;DELAY LOOP SKA ANVÄNDA GAME_SPEED KONSTANTEN OCH DELAYA (GAME_SPEED) antal millisek
+ldi r21,$FF
+D_2:
+ldi r22,$FF
+D_1:
+dec r22
+brne D_1
+dec r21
+brne D_2
+ret
+
+
+LIMITS :
+lds r16 , POSX ; variable
+ldi r17 ,7 ; upper limit +1
+call POS_LIM ; actual work
+sts POSX , r16
+lds r16 , POSY ; variable
+ldi r17 ,5 ; upper limit +1
+call POS_LIM ; actual work
+sts POSY , r16
+ret
+
+
+POS_LIM :
+ori r16 ,0 ; negative ?
+brmi POS_LESS ; POSX neg = > add 1
+cp r16 , r17 ; past edge
+brne POS_OK
+subi r16 ,2
+POS_LESS :
+inc r16
+POS_OK :
+ret
+
+
+
+
+/********************INEFFEKTIV BEEP FRÅN MORSELABBEN , BRA ATT FIXA MED SAMMA KRAV SOM MORSE*****************/
+beep:
+	ldi r28,$6
+level_ett:
+    ldi r23,beep_length/beep_pitch
+level_noll:  
+    sbi PORTB,7
+    rcall beep_delay
+    cbi PORTB,7
+	rcall beep_delay
+    dec r23
+    brne level_noll
+ 
+    dec r28
+    brne level_ett
+
+	
+	ret
+	/********************INEFFEKTIV BEEP_DELAY FRÅN MORSELABBEN , BRA ATT FIXA MED SAMMA KRAV SOM MORSE*****************/
+	//går att fixa med sleep och en annan interrupt??? (obs: endast lyx)
+beep_DELAY:
+    ldi r21,Beep_pitch
+bd_2:
+    ldi r22,$10
+bd_1:
+    dec r22
+    brne bD_1
+ 
+    dec r21
+    brne bD_2
+ 
+    ret
