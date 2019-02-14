@@ -1,0 +1,203 @@
+/*
+ * flesk.asm
+ *
+ *  Created: 2019-02-14 10:17:09
+ *   Author: oskas206
+ */ 
+ .dseg 
+ .org SRAM_START
+ MUX: .byte 1
+ BLUE: .byte 8
+ GREEN: .byte 8
+ RED: .byte 8
+
+
+ .macro INCSRAM ; inc byte in SRAM
+lds r16 , @0
+inc r16
+sts @0 , r16
+.endmacro
+
+ .cseg
+
+
+ 	ldi r16, HIGH(RAMEND)
+	out sph,r16
+	ldi r16, low(ramend)
+	out spl, r16
+	rcall HW_INIT
+	rcall SPI_INIT
+LOOP:
+
+LABEL:
+	lds r16,MUX
+	ldi ZL,LOW(BLUE)
+	ldi ZH,HIGH(BLUE)
+	;blå
+	add ZL,r16
+	ld r16,Z
+	call SPI
+	;grön
+	subi ZL,-8
+	ld r16,Z
+	call SPI
+	;röd
+	subi ZL,-8
+	ld r16,Z
+	call SPI
+
+	
+	lds r17,MUX
+	inc r17
+
+	clr r16
+	sec
+	shiftr:
+	ror r16
+	dec r17
+	brne shiftr
+	
+	com r16
+	call SPI
+	cbi PORTb,1
+	sbi portb,1
+	
+	lds r16, MUX
+	inc r16
+	sbrc r16,3
+	clr r16
+	sts MUX,r16
+
+	rjmp label
+
+	/*
+	cbi portb,1
+	sbi portb,1
+
+	com r21
+
+	;lsl r21
+	breq loop
+	rjmp Label
+	
+
+	cbi portb,1
+	ldi r16,$00 ;blå
+	call SPI
+	call DELAY
+	ldi r16,$07 ;grön
+	call SPI
+	call DELAY
+	ldi r16,$70 ;röd
+	call SPI
+	call DELAY
+	ldi r16,$F1 ;mux
+	;com r16
+	call SPI
+	sbi portb,1
+	call DELAY
+	
+
+
+	ser r16
+	cbi portb,1
+	call SPI
+	call DELAY
+	call SPI
+	call DELAY
+	call SPI
+	call DELAY
+	call SPI
+	sbi portb,1
+	call DELAY
+	
+	cbi portb,1
+ldi r16,$70 ;blå
+	call SPI
+	call DELAY
+	ldi r16,$07 ;grön
+	call SPI
+	call DELAY
+	ldi r16,$07 ;röd
+	call SPI
+	call DELAY
+	ldi r16,$1F ;mux
+	;com r16
+	call SPI
+	call DELAY
+	sbi portb,1
+	jmp loop
+	*/
+	;rjmp END
+	
+END:
+rjmp end
+
+
+
+
+
+DELAY:
+	ldi r18,$FF
+DELAYFAN:
+	dec r18
+	brne DELAYFAN
+	ldi r19, $FF
+DELAY2:
+	dec r19
+	brne DELAY2
+	ret
+
+SPI:
+	;cbi portb,5 ; MOSI
+	;cbi portb,7 ; MASTERCLOCK
+
+	out SPDR,r16
+WAIT_TRANSMIT:
+	sbis SPSR,SPIF
+	rjmp WAIT_TRANSMIT
+	ret
+
+
+
+
+SPI_INIT:
+
+	ldi r17,(1<<DDb7)|(1<<ddb5)|(1<<ddb1)|(1<<ddb4)
+	out DDRB,r17
+
+	; Enable SPI, Master, set clock rate fck/16
+	ldi r17,(1<<SPE)|(1<<MSTR)|(1<<SPR0)|(0<<SPR1)|(0<<SPIE)|(1<<dord)
+	out SPCR,r17
+
+	ret
+
+
+HW_INIT:
+ 
+	clr r16
+	ldi r17, 24
+	ldi ZL,LOW(BLUE)
+	ldi ZH,HIGH(BLUE)
+	hopparn:
+		
+	st Z+, r16
+	dec r17
+	brne hopparn
+
+	
+	ldi r17, 24
+	ldi ZL,LOW(BLUE)
+	ldi ZH,HIGH(BLUE)
+	ldi r16,43
+	st z+,r16
+	subi zl,-8
+	st z+, r16
+
+	subi zl,-8
+	st z+, r16
+	
+	ser r16
+	out ddra, r16
+	;out ddrb, r16
+	ret
