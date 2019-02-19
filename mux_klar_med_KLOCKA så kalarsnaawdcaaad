@@ -143,8 +143,25 @@ HW_INIT:
 	
 	ser r16
 	out ddra, r16
+	ldi r16, $FE
 	out ddrb, r16
 						//FETT MED PASTA
+
+						/*************uysart grejer***/
+	
+
+
+	ldi r16, (1<<RXEN)
+	out ucsrb, r16
+
+	ldi r16, (1<<URSEL)|(1<<USBS)|(3<<UCSZ0)|(0<<UMSEL)|(0<<UCPOL)
+	out UCSRC,r16
+
+
+
+
+	/*************uysart grejer***/
+
 	ldi r16,$0F ;;
 	out MCUCR,r16
 
@@ -152,8 +169,8 @@ HW_INIT:
 	out TCNT1H,r16
 	ldi r16,$F6
 	out TCNT1L,r16
-//	ldi r16,200
-//	out OC1A,r16
+
+
 	clr r16
 	ldi r16,(1<<CS00) //| (1<<CS01)
 	out TCCR0,r16
