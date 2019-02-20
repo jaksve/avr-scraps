@@ -1,0 +1,123 @@
+/*
+ * USART.asm
+ *
+ *  Created: 2019-02-19 09:59:29
+ *   Author: davse612
+ */ 
+  .dseg
+ .org SRAM_START
+ MUX: .byte 1
+ BLUE: .byte 8
+ GREEN: .byte 8
+ RED: .byte 8
+
+ .cseg
+
+	
+	 ldi r16, HIGH(RAMEND)
+	 out sph,r16
+	 ldi r16,LOW(RAMEND)
+	 out spl, r16
+	 rcall HW_INIT
+	rcall usart_init
+
+	
+	ldi r20, $10
+	label0:
+	rcall delay
+	dec r20 
+	brne label0
+	
+	 
+	 
+
+
+
+	sbi portb,7
+	cbi portb,7
+	call usart_transmit
+	 end:
+
+
+	// call usart_transmit
+	 
+	 rjmp end
+
+
+
+
+
+DELAY:
+ldi     r16,$ff   ; Decimal bas
+delayYttreLoop:
+ldi     r17,$FF
+delayInreLoop:
+dec     r17
+brne    delayInreLoop
+dec     r16                    ;1 millisekund
+brne    delayYttreLoop
+
+	ret
+
+
+
+
+	
+
+;ställ om så de pekar rätt inann vi gå5r in
+;skicka signal som interrupt
+USART_Transmit:
+	
+	
+	; Wait for empty transmit buffer
+	sbis UCSRA,UDRE
+	rjmp USART_Transmit
+
+	; Put data (r16) into buffer, sends the data
+	;gör det
+	 ldi r16,$3 ;nu gör vi det
+	out UDR,r16
+	label:
+	
+	//XTAL1
+	ret
+
+
+USART_Init:
+	; Set baud rate
+
+	//clr r16
+	//clr r17
+	//out UBRRH, r17
+	//out UBRRL, r16
+	; Enable receiver and transmitter
+
+	ldi r16, (0<<RXEN)|(1<<TXEN)
+	out UCSRB,r16
+	; Set frame format: 8data, 2stop bit
+	ldi r16, (1<<URSEL)|(1<<umsel)|(1<<USBS)|(3<<UCSZ0)|(0<<ucpol)
+	out UCSRC,r16
+	
+	ret
+
+HW_INIT:
+	
+	clr r16
+	sts MUX,r16
+	ldi r17, 24
+	ldi ZL,LOW(BLUE)
+	ldi ZH,HIGH(BLUE)
+	RESETLOOP:
+	st Z+, r16
+	dec r17
+	//brne RESETLOOP
+
+	ldi r16,$F2
+	out ddra, r16
+	out ddrb, r16
+	ldi r16, (1<<PD1)
+	out ddrd,r16
+	ret
+
+
+
