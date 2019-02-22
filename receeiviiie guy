@@ -15,7 +15,7 @@
 
 	 .cseg
 	 jmp START
-	 .org $002
+	 .org $016 
 	 jmp ta_emot
 	 .//org OVF1addr
 	//jmp INT1_slow
@@ -146,25 +146,28 @@ HW_INIT:
 	
 	ser r16
 	out ddra, r16
-	ldi r16, $FE
+	ldi r16, $FF
 	out ddrb, r16
 						//FETT MED PASTA
 
 						/*************uysart grejer***/
 	
 
+	ldi r17,$CF
+	ldi r16,$FF
+	out UBRRH, r17
+	out UBRRL, r16
 
-
-	ldi r16, (1<<RXEN)
+	ldi r16, (1<<RXEN)|(1<<RXCIE)
 	out ucsrb, r16
 
 	ldi r16, (1<<URSEL)|(1<<USBS)|(3<<UCSZ0)|(1<<UMSEL)|(0<<UCPOL)
 	out UCSRC,r16
 
+	rcall usart_flush
 
 
-
-	/*************uysart grejer***/
+			/*************uysart grejer FINITO***/
 
 	ldi r16,$0F ;;
 	out MCUCR,r16
@@ -173,6 +176,8 @@ HW_INIT:
 	out TCNT1H,r16
 	ldi r16,$F6
 	out TCNT1L,r16
+
+	
 
 
 	clr r16
@@ -192,12 +197,7 @@ HW_INIT:
 	ldi r16,(1<<TOIE0)|(1<<TOIE1)
 	out TIMSK,r16
 
-
-
-	ldi r16,$0F
-	out MCUCR,r16 ; set int0 och int1 att interrupta stigande
-	ldi r16,(1<<INT0)
-	out GICR,r16
+	
 
 
 
@@ -234,13 +234,13 @@ push zl
 push zh
 push r17
 	
-	
+	sbi portb,2
 	rcall usart_receive
-
+	//in r16, udr
 	sts BLUE,r16
-	
-	rcall usart_flush
-
+	//rcall usart_flush
+	//rcall usart_flush
+	cbi portb,2
 pop r17
 pop zh
 pop zl	
@@ -259,6 +259,8 @@ rjmp USART_Flush
 
 USART_Receive:
 ; Wait for data to be received
+
+
 sbis UCSRA, RXC
 rjmp USART_Receive
 ; Get and return received data from buffer
