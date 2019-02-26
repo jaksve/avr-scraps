@@ -6,6 +6,7 @@
  */
 
 
+ 
   .dseg
  .org SRAM_START
  MUX: .byte 1
@@ -23,30 +24,21 @@
 	 rcall HW_INIT
 	rcall usart_init
 
-	
-	ldi r20, $10
-	label0:
+	ldi r20, $1A
+	DELAYS:
 	rcall delay
 	dec r20 
-	brne label0
+	brne DELAYS
 	
-	 
-	 
 
 
+	call usart_transmit
+	
+end:
 
-	//sbi portb,7
-	
-	
-	//call usart_transmit
-	
-	 end:
-	 //rcall delay
-	
-	//rcall usart_transmit
-	 //rcall delay
+	rcall delay
 	 
-	 rjmp end
+	rjmp end
 
 
 
@@ -65,46 +57,29 @@ brne    delayYttreLoop
 	ret
 
 
-
-
-	
-
-;ställ om så de pekar rätt inann vi gå5r in
-;skicka signal som interrupt
 USART_Transmit:
 	
-	sbi portb,7
-	cbi portb,7
 	; Wait for empty transmit buffer
 	sbis UCSRA,UDRE
 	rjmp USART_Transmit
 
-	//cbi portb,6
-	; Put data (r16) into buffer, sends the data
-	;gör det
-	 ldi r16,$FF ;nu gör vi det
+	ldi r16,$03 
 	out UDR,r16
 	
 	ret
 
 
 USART_Init:
-	; Set baud rate
 
-	//clr r16
-	//clr r17
-	//out UBRRH, r17
-	//out UBRRL, r16
-	; Enable receiver and transmitter
-	ldi r17,$CF
-	ldi r16,$FF
+	clr r17
+	ldi r16,12
 	out UBRRH, r17
 	out UBRRL, r16
 
 	ldi r16, (0<<RXEN)|(1<<TXEN)
 	out UCSRB,r16
-	; Set frame format: 8data, 2stop bit
-	ldi r16, (1<<URSEL)|(1<<umsel)|(1<<USBS)|(3<<UCSZ0)|(0<<ucpol)
+
+	ldi r16, (1<<URSEL)|(1<<USBS)|(3<<UCSZ0)
 	out UCSRC,r16
 	
 	ret
@@ -119,7 +94,6 @@ HW_INIT:
 	RESETLOOP:
 	st Z+, r16
 	dec r17
-	//brne RESETLOOP
 
 	ldi r16,$F2
 	out ddra, r16
