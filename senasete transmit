@@ -1,0 +1,281 @@
+
+	.equ SPEED=$02
+	.dseg
+	.org SRAM_START
+Playerselect : .byte 1
+Player1 : .byte 8
+Player2 : .byte 8
+
+	.macro JOYSTICK_X
+	ldi @0,(1<<adlar)
+	out admux,@0
+
+	sbi adcsra,adsc
+	sbic adcsra,adsc
+	rjmp pc-1
+	in @0, ADCH;
+	.endmacro
+
+
+	.macro INCSRAM ; inc byte in SRAM
+	ld r16 , @0
+	sbrs r16,0
+	lsr r16
+	st @0 , r16
+	.endmacro
+
+	.macro DECSRAM ; dec byte in SRAM
+	ld r16 , @0
+	sbrs r16,7
+	lsl r16
+	st @0 , r16
+	.endmacro
+
+ .cseg
+ jmp start
+	.org $00c
+jmp timer_interrupt
+
+
+
+start:
+	 ldi r16, HIGH(RAMEND)
+	 out sph,r16
+	 ldi r16,LOW(RAMEND)
+	 out spl, r16
+	 rcall HW_INIT
+	rcall usart_init
+	call timer_init
+	call adc_init
+	sei
+
+lable:
+
+	
+
+
+	ldi r16,0
+end:
+	//call usart_transmit
+	inc r16
+	ldi r20, $1A
+	DELAYS:
+	rcall delay
+	dec r20 
+	brne DELAYS
+
+	rjmp end
+
+
+
+Joystick: ; borde funka tror vi
+	push r19
+
+	joystick_x r19
+	andi r19,$F0
+
+	cpi r19,$F0
+	brne INTE_Fram
+	decsram Z
+	INte_Fram:
+	cpi r19,$00
+	brne inte_bak
+	incsram Z
+	inte_bak:
+
+	pop r19
+	ret
+
+Update_player:
+	push r16
+	lds r16, SRAM_START
+	inc r16
+	sts SRAM_START,r19
+	sbrs r16,0
+	rjmp playerone
+		
+	ldi ZH,High(Player2)
+	ldi ZL,Low(Player2)
+
+	rjmp finish
+playerone:
+	ldi ZH,High(Player1)
+	ldi ZL,Low(Player1)
+
+finish:
+	ldi r16,8
+
+	st z,r16
+
+	pop r16
+	ret
+
+
+
+
+
+
+DELAY:
+ldi     r19,$FF   ; Decimal bas
+delayYttreLoop:
+ldi     r17,$FF
+delayInreLoop:
+dec     r17
+brne    delayInreLoop
+dec     r19                    ;1 millisekund
+brne    delayYttreLoop
+
+	ret
+
+
+USART_Transmit:
+	
+	; Wait for empty transmit buffer
+	sbis UCSRA,UDRE
+	rjmp USART_Transmit
+
+	//ldi r16,$05 
+	out UDR,r16
+	
+	ret
+
+
+USART_Init:
+
+	clr r17
+	ldi r16,12
+	out UBRRH, r17
+	out UBRRL, r16
+
+	ldi r16, (0<<RXEN)|(1<<TXEN)
+	out UCSRB,r16
+
+	ldi r16, (1<<URSEL)|(1<<USBS)|(3<<UCSZ0)
+	out UCSRC,r16
+	
+	ret
+
+
+temp_load:
+	ldi ZH,High(player1)
+	ldi ZL,Low(player1)
+	ldi r16,8
+	st z,r16
+	subi zl,-8
+	st z,r16
+
+	
+	
+	ret
+
+
+
+HW_INIT:
+		
+	ldi ZH,High(Playerselect)
+	ldi ZL,Low(Playerselect)
+	ldi r16,17
+	clr r17
+	inteklar:
+	st Z+,r17
+	dec r16
+	brne inteklar
+
+	rcall temp_load
+
+	ldi r16,$F2
+	out ddra, r16
+	out ddrb, r16
+	ldi r16, (1<<PD1)
+	out ddrd,r16
+
+	ret
+
+adc_init:
+
+	
+	ldi r16,(1<<adlar);	adc0 ingång vald
+	out admux,r16;			adlar=1, left adjust result.
+
+	ldi r16,(1<<aden);	aden=enable ((PRESCALE<<adps))? adps (adprescaler) sätts i varje fall i acsra (adc statusregister) (s.213 i PDF).
+	out adcsra,r16;	slår på strömmen till ad-hardwarewere
+
+	ret
+
+timer_init:
+
+	clr r16
+	out TCCR1A,r16
+	ldi r16, (1<<CS12)|(1<<CS10)|(1<<wgm12)
+	out TCCR1B,r16
+	
+	ldi r16,SPEED/// r16
+	out ocr1AH,r16
+	ldi r16,$00
+	out ocr1AL,r16
+
+
+	
+	ldi r16,(0<<TOIE0)|(0<<TOIE1)|(1<<ocie1a)
+	out TIMSK,r16
+
+
+ret
+
+
+timer_interrupt:
+	PUSH R16
+	in r16,sreg
+	push r16
+	push r17
+	push zl
+	push zh
+
+
+	clr r16
+	out TCCR1B,r16
+
+	ldi zh,HIGH(PLAYER1)
+	ldi ZL,low(player1)
+
+	lds r16, playerselect
+	sbrs r16,0
+	subi ZL,-8
+	
+	call joystick
+	
+
+	
+
+
+	ldi ZH,HIGH(player1)
+	ldi ZL,LOW(player1)
+	ldi r17,16
+send_field:
+
+	ld r16,z+
+
+	rcall usart_transmit
+	dec r17
+	brne send_field
+
+
+
+	
+
+
+
+
+
+	ldi r16, (1<<CS12)|(1<<CS10)|(1<<wgm12)
+	out TCCR1B,r16
+
+
+
+	pop zh
+	pop zl
+	pop r17
+	pop r16
+	out sreg,r16
+	pop r16
+	reti
