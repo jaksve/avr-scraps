@@ -1,5 +1,6 @@
 
- .dseg
+
+  .dseg
  .org SRAM_START
  MUX: .byte 1
  BLUE: .byte 8
