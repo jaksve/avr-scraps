@@ -1,3 +1,11 @@
+/*
+ * asdtrans.asm
+ *
+ *  Created: 2019-02-28 09:41:49
+ *   Author: oskas206
+ */ 
+
+
 
 	.equ SPEED=$02
 	.dseg
@@ -5,6 +13,8 @@
 Playerselect : .byte 1
 Player1 : .byte 8
 Player2 : .byte 8
+WHERE_FALL:	.byte 1
+
 
 	.macro JOYSTICK_X
 	ldi @0,(1<<adlar)
@@ -49,20 +59,10 @@ start:
 	call adc_init
 	sei
 
-lable:
-
-	
 
 
-	ldi r16,0
+
 end:
-	//call usart_transmit
-	inc r16
-	ldi r20, $1A
-	DELAYS:
-	rcall delay
-	dec r20 
-	brne DELAYS
 
 	rjmp end
 
@@ -70,6 +70,17 @@ end:
 
 Joystick: ; borde funka tror vi
 	push r19
+	push r16
+	push zh
+	push zl
+	
+	lds r16,playerselect
+	
+	ldi zh,high(player1)
+	ldi zl,low(player1)
+
+	sbrc r16,0
+	subi zl,-8
 
 	joystick_x r19
 	andi r19,$F0
@@ -83,34 +94,36 @@ Joystick: ; borde funka tror vi
 	incsram Z
 	inte_bak:
 
+
+	pop zl
+	pop zh
+	pop r16
 	pop r19
+
 	ret
 
 Update_player:
+
 	push r16
+	push r17
+
 	lds r16, SRAM_START
-	inc r16
-	sts SRAM_START,r19
+	ldi r17,$01
+	eor r16,r17
+	sts SRAM_START,r16
+
+	ldi r17,8
+
 	sbrs r16,0
-	rjmp playerone
-		
-	ldi ZH,High(Player2)
-	ldi ZL,Low(Player2)
+	sts player1,r17
 
-	rjmp finish
-playerone:
-	ldi ZH,High(Player1)
-	ldi ZL,Low(Player1)
+	sbrc r16,0 
+	sts player2,r17
 
-finish:
-	ldi r16,8
-
-	st z,r16
-
+	pop r17
 	pop r16
+
 	ret
-
-
 
 
 
@@ -159,10 +172,18 @@ USART_Init:
 temp_load:
 	ldi ZH,High(player1)
 	ldi ZL,Low(player1)
-	ldi r16,8
-	st z,r16
-	subi zl,-8
-	st z,r16
+	
+	lds r16,playerselect
+
+	ldi r17,8
+	sbrs r16,0
+	sts player1,r17
+
+	sbrc r16,0 
+	sts player2,r17
+	
+	ldi r16,low(player1)
+	sts where_fall,r16
 
 	
 	
@@ -186,7 +207,7 @@ HW_INIT:
 	ldi r16,$F2
 	out ddra, r16
 	out ddrb, r16
-	ldi r16, (1<<PD1)
+	ldi r16, (1<<PD1)|(0<<PD7)
 	out ddrd,r16
 
 	ret
@@ -214,14 +235,68 @@ timer_init:
 	ldi r16,$00
 	out ocr1AL,r16
 
-
 	
 	ldi r16,(0<<TOIE0)|(0<<TOIE1)|(1<<ocie1a)
 	out TIMSK,r16
 
 
-ret
+	ret
 
+
+
+check_legal:
+	push zh
+	push zl
+	push r16
+	push r17
+
+	ldi zh,HIGH(PLAYER1)
+	ldi ZL,low(player1)
+
+	lds r16, playerselect
+	sbrc r16,0
+	subi ZL,-8
+
+	lds r17, (player1)+1
+	lds r16, (player2)+1
+	or r17,r16
+	ld r16,z
+	and r16,r17
+	cpi r16,0
+	brne not_legal
+	rjmp legal
+
+not_legal:
+	ldi r17,$02
+	lds r16,PLAYERSELECT
+	or r16,r17
+	sts playerselect,r16	
+
+
+legal:
+
+	pop r17
+	pop r16
+	pop zl
+	pop zh
+
+	ret
+
+
+set_fall:
+push r17
+push r16
+	
+	call check_legal
+	
+	ldi r17,$02
+	lds r16,PLAYERSELECT
+	eor r16,r17
+	sts playerselect,r16	
+
+pop r16
+pop r17
+ret
 
 timer_interrupt:
 	PUSH R16
@@ -231,9 +306,30 @@ timer_interrupt:
 	push zl
 	push zh
 
-
 	clr r16
 	out TCCR1B,r16
+	
+	lds r16,PLAYERSELECT
+	sbrc r16,1
+	rjmp slapp
+
+	sbis PIND,7
+	rcall set_fall
+
+	lds r16,PLAYERSELECT
+	sbrs r16,1
+	rjmp inte_slapp
+
+
+SLAPP:
+	call fall_animation
+	
+	lds r16,playerselect
+	sbrs r16,1
+	call update_player
+	rjmp send_field
+inte_slapp:
+	
 
 	ldi zh,HIGH(PLAYER1)
 	ldi ZL,low(player1)
@@ -244,25 +340,18 @@ timer_interrupt:
 	
 	call joystick
 	
-
-	
-
+send_field:
 
 	ldi ZH,HIGH(player1)
 	ldi ZL,LOW(player1)
 	ldi r17,16
-send_field:
+send_loop:
 
 	ld r16,z+
 
 	rcall usart_transmit
 	dec r17
-	brne send_field
-
-
-
-	
-
+	brne send_loop
 
 
 
@@ -279,3 +368,108 @@ send_field:
 	out sreg,r16
 	pop r16
 	reti
+
+
+
+fall_animation:
+	push zh
+	push zl
+	push r16
+	push r17
+	push r18
+	push r19
+	push r20
+	push r21
+	push r22
+	push r23
+
+	lds r16,playerselect
+	ldi ZH,High(Player1)
+	lds ZL,where_fall
+
+	sbrs r16,0
+	rjmp spelare11
+
+	ldd r16,z+8
+	ld r17,z
+	eor r16,r17
+	rjmp falling
+spelare11:
+
+	ldd r17,z+8
+	ld r16,Z
+	eor r16,r17
+falling:
+	
+	ldd r18,Z+1
+	ldd r19,Z+9
+	or r18,r19 ; kombinera båda spelplanernas rad under
+	mov r19,r18 ; spara rad under i temp, 2 kopior av raden únder
+
+	or r16,r18
+	eor r16,r19
+	mov r18,r19
+
+	or r18,r16 ; or:a undre med övre
+
+	cp r19,r18
+	breq landed
+
+	lds r20,playerselect
+
+	sbrs r20,0
+	rjmp spelare1
+
+	;player2
+	ldd r21,Z+8 ; ladda rad som ska falla
+	ldd r22,z+9 ; ladda rad under
+	mov r23,r22 ; spara rad under i temp
+	or r22,r16  ; or:a rad under för att få ny rad under
+	and r21,r19 ; uppdatera rad över
+	std z+8,r21
+	std z+9,r22
+
+	rjmp hejsvejs
+
+spelare1:
+	ld r21,Z ; ladda rad som ska falla
+	ldd r22,z+1 ; ladda rad under
+	mov r23,r22 ; spara rad under i temp
+	or r22,r16  ; or:a rad under för att få ny rad under
+	and r21,r19 ; updatera rad över
+	st z,r21
+	std z+1,r22
+
+hejsvejs:
+
+	
+	subi zl,-1
+	sts where_fall,zl
+
+	cpi ZL,LOW(PLAYER1)+7
+	BREQ landed
+	cpi ZL,LOW(player2)+7
+	breq landed
+	rjmp ended
+
+	landed:
+	ldi r16,low(player1)
+	sts where_fall,r16
+	lds r16,playerselect
+	andi r16,$FD
+	sts playerselect,r16
+
+
+ended:
+	pop r23
+	pop r22
+	pop r21
+	pop r20
+	pop r19
+	pop r18
+	pop r17
+	pop r16
+	pop zl
+	pop zh
+
+	ret
