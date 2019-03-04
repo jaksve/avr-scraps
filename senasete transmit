@@ -1,11 +1,3 @@
-/*
- * asdtrans.asm
- *
- *  Created: 2019-02-28 09:41:49
- *   Author: oskas206
- */ 
-
-
 
 	.equ SPEED=$02
 	.dseg
@@ -14,7 +6,7 @@ Playerselect : .byte 1
 Player1 : .byte 8
 Player2 : .byte 8
 WHERE_FALL:	.byte 1
-
+What_fall: .byte 1
 
 	.macro JOYSTICK_X
 	ldi @0,(1<<adlar)
@@ -25,7 +17,6 @@ WHERE_FALL:	.byte 1
 	rjmp pc-1
 	in @0, ADCH;
 	.endmacro
-
 
 	.macro INCSRAM ; inc byte in SRAM
 	ld r16 , @0
@@ -60,26 +51,56 @@ start:
 	sei
 
 
-
-
 end:
-
+	lds r16,playerselect
+	sbrs r16,2
 	rjmp end
 
+	some1win:
+	cli
+
+	ldi ZH,High(Player1)
+	ldi ZL,Low(Player1)
+	ldi r16,16
+	clr r17
+	intklar:
+	st Z+,r17
+	dec r16
+	brne intklar
+	
+	subi zl,16
+	
+	lds r16,playerselect
+
+	sbrs r16,0
+	subi zl,-8
+
+	ldi r18,8
+	ser r17
+	intrklar1:
+	st Z+,r17
+	dec r18
+	brne intrklar1
 
 
-Joystick: ; borde funka tror vi
+	call send_field
+
+	manbun:
+	rjmp manbun
+
+
+
+Joystick: 
 	push r19
-	push r16
 	push zh
 	push zl
 	
-	lds r16,playerselect
+	lds r19,playerselect
 	
 	ldi zh,high(player1)
 	ldi zl,low(player1)
-
-	sbrc r16,0
+	
+	sbrc r19,0
 	subi zl,-8
 
 	joystick_x r19
@@ -94,49 +115,9 @@ Joystick: ; borde funka tror vi
 	incsram Z
 	inte_bak:
 
-
 	pop zl
 	pop zh
-	pop r16
 	pop r19
-
-	ret
-
-Update_player:
-
-	push r16
-	push r17
-
-	lds r16, SRAM_START
-	ldi r17,$01
-	eor r16,r17
-	sts SRAM_START,r16
-
-	ldi r17,8
-
-	sbrs r16,0
-	sts player1,r17
-
-	sbrc r16,0 
-	sts player2,r17
-
-	pop r17
-	pop r16
-
-	ret
-
-
-
-
-DELAY:
-ldi     r19,$FF   ; Decimal bas
-delayYttreLoop:
-ldi     r17,$FF
-delayInreLoop:
-dec     r17
-brne    delayInreLoop
-dec     r19                    ;1 millisekund
-brne    delayYttreLoop
 
 	ret
 
@@ -146,8 +127,7 @@ USART_Transmit:
 	; Wait for empty transmit buffer
 	sbis UCSRA,UDRE
 	rjmp USART_Transmit
-
-	//ldi r16,$05 
+ 
 	out UDR,r16
 	
 	ret
@@ -169,30 +149,8 @@ USART_Init:
 	ret
 
 
-temp_load:
-	ldi ZH,High(player1)
-	ldi ZL,Low(player1)
+mem_load:
 	
-	lds r16,playerselect
-
-	ldi r17,8
-	sbrs r16,0
-	sts player1,r17
-
-	sbrc r16,0 
-	sts player2,r17
-	
-	ldi r16,low(player1)
-	sts where_fall,r16
-
-	
-	
-	ret
-
-
-
-HW_INIT:
-		
 	ldi ZH,High(Playerselect)
 	ldi ZL,Low(Playerselect)
 	ldi r16,17
@@ -202,18 +160,29 @@ HW_INIT:
 	dec r16
 	brne inteklar
 
-	rcall temp_load
+	ldi r17,8
+	sts player1,r17
+	
+	ldi r16,low(player1)
+	sts where_fall,r16
+
+	ret
+
+
+
+HW_INIT:
+		
+	rcall mem_load
 
 	ldi r16,$F2
 	out ddra, r16
-	out ddrb, r16
+
 	ldi r16, (1<<PD1)|(0<<PD7)
 	out ddrd,r16
 
 	ret
 
 adc_init:
-
 	
 	ldi r16,(1<<adlar);	adc0 ingång vald
 	out admux,r16;			adlar=1, left adjust result.
@@ -235,7 +204,6 @@ timer_init:
 	ldi r16,$00
 	out ocr1AL,r16
 
-	
 	ldi r16,(0<<TOIE0)|(0<<TOIE1)|(1<<ocie1a)
 	out TIMSK,r16
 
@@ -245,24 +213,15 @@ timer_init:
 
 
 check_legal:
-	push zh
-	push zl
+
 	push r16
 	push r17
-
-	ldi zh,HIGH(PLAYER1)
-	ldi ZL,low(player1)
-
-	lds r16, playerselect
-	sbrc r16,0
-	subi ZL,-8
 
 	lds r17, (player1)+1
 	lds r16, (player2)+1
 	or r17,r16
-	ld r16,z
+	lds r16,what_fall
 	and r16,r17
-	cpi r16,0
 	brne not_legal
 	rjmp legal
 
@@ -272,13 +231,10 @@ not_legal:
 	or r16,r17
 	sts playerselect,r16	
 
-
 legal:
 
 	pop r17
 	pop r16
-	pop zl
-	pop zh
 
 	ret
 
@@ -287,16 +243,26 @@ set_fall:
 push r17
 push r16
 	
+	lds r17,player2
+
+	sbrs r16,0
+	lds r17,player1
+
+	sts what_fall,r17
+
 	call check_legal
 	
 	ldi r17,$02
 	lds r16,PLAYERSELECT
 	eor r16,r17
 	sts playerselect,r16	
+	
 
 pop r16
 pop r17
 ret
+
+
 
 timer_interrupt:
 	PUSH R16
@@ -325,49 +291,67 @@ SLAPP:
 	call fall_animation
 	
 	lds r16,playerselect
-	sbrs r16,1
-	call update_player
-	rjmp send_field
+	sbrc r16,1 
+	rjmp ready_send
+	
+	ldi r17,$01
+	eor r16,r17
+	sts playerselect,r16
+
+	ldi r17,8
+
+	sbrs r16,0
+	sts player1,r17
+
+	sbrc r16,0 
+	sts player2,r17
+
+
+	rjmp  ready_send
 inte_slapp:
 	
-
-	ldi zh,HIGH(PLAYER1)
-	ldi ZL,low(player1)
-
-	lds r16, playerselect
-	sbrs r16,0
-	subi ZL,-8
-	
 	call joystick
-	
-send_field:
 
-	ldi ZH,HIGH(player1)
-	ldi ZL,LOW(player1)
-	ldi r17,16
-send_loop:
-
-	ld r16,z+
-
-	rcall usart_transmit
-	dec r17
-	brne send_loop
-
-
+ready_send:
+	call send_field
 
 
 	ldi r16, (1<<CS12)|(1<<CS10)|(1<<wgm12)
 	out TCCR1B,r16
-
-
-
 	pop zh
 	pop zl
 	pop r17
 	pop r16
 	out sreg,r16
 	pop r16
+	
 	reti
+
+
+send_field:
+	push r17
+	push r16
+	push zl
+	push zh
+
+	ldi ZH,HIGH(player1)
+	ldi ZL,LOW(player1)
+	ldi r17,16
+
+send_loop:
+	ld r16,z+
+
+	rcall usart_transmit
+	dec r17
+	brne send_loop
+
+	pop zh
+	pop zl
+	pop r16
+	pop r17
+
+	ret
+
 
 
 
@@ -376,94 +360,106 @@ fall_animation:
 	push zl
 	push r16
 	push r17
-	push r18
-	push r19
-	push r20
-	push r21
-	push r22
-	push r23
 
-	lds r16,playerselect
 	ldi ZH,High(Player1)
 	lds ZL,where_fall
-
-	sbrs r16,0
-	rjmp spelare11
-
-	ldd r16,z+8
-	ld r17,z
-	eor r16,r17
-	rjmp falling
-spelare11:
-
-	ldd r17,z+8
-	ld r16,Z
-	eor r16,r17
+	
 falling:
-	
-	ldd r18,Z+1
-	ldd r19,Z+9
-	or r18,r19 ; kombinera båda spelplanernas rad under
-	mov r19,r18 ; spara rad under i temp, 2 kopior av raden únder
 
-	or r16,r18
-	eor r16,r19
-	mov r18,r19
+	ldd r16,Z+1
+	ldd r17,Z+9
+	or r17,r16 ; kombinera båda spelplanernas rad under
 
-	or r18,r16 ; or:a undre med övre
+	lds r16,what_fall
 
-	cp r19,r18
-	breq landed
+	and r17,r16
+	brne landed
 
-	lds r20,playerselect
+	lds r17,playerselect
 
-	sbrs r20,0
-	rjmp spelare1
+	sbrc r17,0
+	subi zl,-8
 
-	;player2
-	ldd r21,Z+8 ; ladda rad som ska falla
-	ldd r22,z+9 ; ladda rad under
-	mov r23,r22 ; spara rad under i temp
-	or r22,r16  ; or:a rad under för att få ny rad under
-	and r21,r19 ; uppdatera rad över
-	std z+8,r21
-	std z+9,r22
+	ld r17,z
+	eor r17,r16
+	st z+,r17
+	ld r17,z
+	eor r17,r16
+	st z,r17
 
-	rjmp hejsvejs
-
-spelare1:
-	ld r21,Z ; ladda rad som ska falla
-	ldd r22,z+1 ; ladda rad under
-	mov r23,r22 ; spara rad under i temp
-	or r22,r16  ; or:a rad under för att få ny rad under
-	and r21,r19 ; updatera rad över
-	st z,r21
-	std z+1,r22
-
-hejsvejs:
-
-	
-	subi zl,-1
+	lds r17,playerselect
+	sbrc r17,0
+	subi zl,8	
 	sts where_fall,zl
-
+	
 	cpi ZL,LOW(PLAYER1)+7
 	BREQ landed
 	cpi ZL,LOW(player2)+7
 	breq landed
+	
 	rjmp ended
 
-	landed:
+landed:
+	
+	call check_win
+
 	ldi r16,low(player1)
 	sts where_fall,r16
 	lds r16,playerselect
 	andi r16,$FD
 	sts playerselect,r16
 
-
 ended:
-	pop r23
-	pop r22
-	pop r21
+
+	pop r17
+	pop r16
+	pop zl
+	pop zh
+
+	ret
+
+
+check_win:
+	call check_x
+	call check_y
+	call check_diag
+	ret
+
+check_diag:
+	push zh
+	push zl
+	push r16
+	push r17
+	push r18
+	push r19
+	push r20
+
+	lds r17,what_fall
+	ldi zh,HIGH(player1)
+	lds zl, where_fall
+	
+	lds r16,playerselect
+	sbrc r16,0
+	subi zl,-8 ;; Z pekar på rätt dude
+	mov r16,r17 ;what_fall ->r16
+
+
+	check_down:
+	lsr r16
+	ld r19,-z
+	and r16, r19
+	breq check_up
+	or r17,r19
+
+
+	check_up:
+
+	
+	win_diag:
+	call win
+
+	end_diag:
+
 	pop r20
 	pop r19
 	pop r18
@@ -471,5 +467,103 @@ ended:
 	pop r16
 	pop zl
 	pop zh
+	ret
+
+
+check_y:
+	push zh
+	push zl
+	push r16
+	push r17
+	push r18
+
+	lds r16,where_fall
+	subi r16,-3
+	cpi r16,low(player2)
+	brge not_winy
+
+
+	lds r16,what_fall
+
+	ldi zh,high(player1)
+	lds zl,where_fall
+	inc zl
+
+	lds r18,playerselect
+	sbrc r18,0
+	subi zl,-8
+
+	ldi r18,3
+	yes:
+
+	ld r17,z+
+	and r17,r16
+	breq not_winy
+	dec r18
+	brne yes
+
+winy:
+
+call win
+
+not_winy:
+	
+	pop r18
+	pop r17
+	pop r16
+	pop zl
+	pop zh
+	ret
+
+
+
+
+check_x:
+	push r16
+	push r17
+	push zh
+	push zl
+
+	ldi zh,high(player1)
+	lds zl,where_fall
+	
+	lds r16,playerselect
+	sbrc r16,0
+	subi zl,-8
+
+	ld r16,z
+	clr r17
+lopan:
+	
+	inc r17
+	sbrs r16,0
+	clr r17
+	
+	cpi r17,4
+	breq winx
+
+	lsr r16
+	brne lopan
+	rjmp not_winx
+
+winx:
+	call win
+
+not_winx:
+	
+	pop zl
+	pop zh
+	pop r17
+	pop r16
 
 	ret
+
+
+win:
+	
+	lds r16,playerselect
+
+	ori r16,$04
+
+	sts playerselect,r16
+ret
