@@ -1,5 +1,5 @@
 
-	.equ SPEED=$02
+	.equ SPEED=$01
 	.dseg
 	.org SRAM_START
 Playerselect : .byte 1
@@ -106,12 +106,12 @@ Joystick:
 	joystick_x r19
 	andi r19,$F0
 
-	cpi r19,$F0
-	brne INTE_Fram
+	cpi r19,$90
+	brlo INTE_Fram
 	decsram Z
 	INte_Fram:
-	cpi r19,$00
-	brne inte_bak
+	cpi r19,$10
+	brsh inte_bak
 	incsram Z
 	inte_bak:
 
