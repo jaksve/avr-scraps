@@ -1,5 +1,5 @@
 
-	.equ SPEED=$01
+	.equ SPEED=$08
 	.dseg
 	.org SRAM_START
 Playerselect : .byte 1
@@ -196,7 +196,7 @@ timer_init:
 
 	clr r16
 	out TCCR1A,r16
-	ldi r16, (1<<CS12)|(1<<CS10)|(1<<wgm12)
+	ldi r16, (1<<CS12)|(0<<CS10)|(1<<wgm12)
 	out TCCR1B,r16
 	
 	ldi r16,SPEED/// r16
@@ -316,7 +316,7 @@ ready_send:
 	call send_field
 
 
-	ldi r16, (1<<CS12)|(1<<CS10)|(1<<wgm12)
+	ldi r16, (1<<CS12)|(0<<CS10)|(1<<wgm12)
 	out TCCR1B,r16
 	pop zh
 	pop zl
