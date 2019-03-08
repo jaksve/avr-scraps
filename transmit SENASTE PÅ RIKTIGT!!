@@ -423,7 +423,71 @@ check_win:
 	call check_x
 	call check_y
 	call check_diag
+
+	call check_diag_second
 	ret
+
+check_diag_second:
+	push zl
+	push zh
+	push r16
+	push r17
+	push r18
+	push r19
+
+	lds r16,what_fall
+	lds r17,where_fall
+not_at_edge_2:
+
+	cpi r16,$01
+	breq reach_edge_2
+	cpi r17,low(player1)+1
+	breq reach_edge_2
+	
+	lsr r16
+	dec r17
+rjmp not_at_edge_2
+
+reach_edge_2:
+clr r19
+	ldi zh,high(player1)
+	
+	mov zl,r17
+	
+	lds r18,playerselect
+	sbrc r18,0
+	subi zl,-8
+
+not_done_yet_2:
+	inc r19
+	ld r18,z+
+	and r18,r16
+	brne inte_nollad_2
+	clr r19
+inte_nollad_2:
+	
+	cpi r19,4
+	breq win_diag
+	lsl r16
+	inc r17
+	cpi r16,0
+	breq not_win_diag_2
+	cpi r17, low(player2)
+	brge not_win_diag_2
+
+	rjmp not_done_yet_2
+
+win_diag_2:
+	call win
+not_win_diag_2:	
+
+	pop r19
+	pop r18
+	pop r17
+	pop r16
+	pop zh
+	pop zl
+ret
 
 
 check_diag:
@@ -455,20 +519,21 @@ reach_edge:
 	ldi zh,high(player1)
 	
 	mov zl,r17
-	dec r17
+	
 	lds r18,playerselect
 	sbrc r18,0
 	subi zl,-8
 
 not_done_yet:
+	inc r19
 	ld r18,z+
 	and r18,r16
 	brne inte_nollad
 	clr r19
 inte_nollad:
 
-	inc r19
-	cpi r19,5
+	
+	cpi r19,4
 	breq win_diag
 	lsr r16
 	inc r17
